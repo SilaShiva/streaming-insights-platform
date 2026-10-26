@@ -1,0 +1,71 @@
+# Central config for streaming-insights-platform.
+# Secrets come from environment variables (see .env.example) -- never here.
+
+project:
+  name: streaming-insights-platform
+  seed: 42
+  timezone: "Asia/Kolkata"
+
+# Synthetic event generator
+generator:
+  orders_per_hour: 600
+  review_rate: 0.35          # fraction of delivered orders that leave a review
+  burst_probability: 0.05    # random traffic spikes
+  burst_multiplier: 4.0
+  churn_cities:
+    - "Bangalore"
+    - "Mumbai"
+    - "Delhi"
+    - "Hyderabad"
+    - "Pune"
+    - "Chennai"
+    - "Kolkata"
+    - "Jaipur"
+  restaurants_per_city: 40
+
+# Delay-reason distribution drives both the generator (ground truth) and the
+# fallback heuristic used when the LLM is unavailable.
+delay_reasons:
+  - restaurant_prep_delay
+  - rider_shortage
+  - traffic
+  - weather
+  - address_issue
+  - restaurant_backlog
+  - unknown
+
+# Redis Streams transport
+stream:
+  redis_url: "redis://localhost:6379/0"
+  key: "orders:events"
+  consumer_group: "enrichers"
+  consumer_name: "enricher-1"
+  batch_count: 100
+  block_ms: 2000
+
+# LLM enrichment (provider-agnostic OpenAI-compatible endpoint)
+llm:
+  provider: "openai-compatible"
+  base_url: ""               # overridden by LLM_BASE_URL env var
+  model: ""                  # overridden by LLM_MODEL env var
+  temperature: 0.0
+  max_output_tokens: 120
+  timeout_seconds: 12
+  max_retries: 1
+  rate_limit_seconds: 0.0    # e.g. 32 for gated gateways
+  cache_max_items: 20000     # in-memory dedup cache for identical texts
+  fallback: "rules"          # rules | passthrough
+
+# Warehouse (BigQuery sandbox or local DuckDB mirror)
+warehouse:
+  backend: "duckdb"          # duckdb | bigquery
+  duckdb_path: "data/warehouse.duckdb"
+  raw_table: "raw_events"
+  enriched_table: "enriched_events"
+
+# Data-quality gates
+quality:
+  row_count_drop_warn_pct: 10.0
+  row_count_drop_fail_pct: 30.0
+  null_enriched_fail_pct: 5.0
+  stale_minutes_warn: 30
