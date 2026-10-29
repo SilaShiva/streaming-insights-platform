@@ -1,0 +1,19 @@
+# Copy to ~/.dbt/profiles.yml (or point DBT_PROFILES_DIR here).
+# DuckDB profile is the default local target; bigquery for the sandbox cloud.
+
+streaming_insights:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: ../data/warehouse.duckdb
+      threads: 4
+
+    bigquery:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('GCP_PROJECT') }}"
+      dataset: streaming_raw
+      location: US
+      threads: 4
+      priority: interactive

@@ -1,0 +1,2 @@
+gcp_project    = "your-sandbox-project-id"
+staging_bucket = "your-unique-bucket-name-streaming-insights"
