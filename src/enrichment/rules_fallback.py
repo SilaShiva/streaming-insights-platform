@@ -12,12 +12,13 @@ from src.generator import DELAY_REASONS
 
 # keyword -> reason (order matters: first hit wins)
 _KEYWORDS: list[tuple[str, str]] = [
-    (r"\b(rain|storm|fog|weather|snow|heat)\b", "weather"),
-    (r"\b(traffic|jam|signal|road ?block|crawling)\b", "traffic"),
+    # stem-style prefixes: rained/raining, prepared/preparing, queued/queueing
+    (r"\b(rain\w*|storm\w*|fog\w*|weather|snow\w*|heat\w*)\b", "weather"),
+    (r"\b(traffic\w*|jam\w*|signal\w*|road ?block\w*|crawl\w*)\b", "traffic"),
     (r"\b(no rider|rider (was )?(not |never )?(assigned|allocated|available)|unassigned)\b", "rider_shortage"),
-    (r"\b(address|landmark|locate|find my|wrong location|could ?n[o']t find)\b", "address_issue"),
-    (r"\b(kitchen|prep|prepar|cook|restaurant (took|was slow))\b", "restaurant_prep_delay"),
-    (r"\b(backlog|rush|swamped|queued|busy place)\b", "restaurant_backlog"),
+    (r"\b(address\w*|landmark\w*|locat\w*|find my|wrong location|could ?n[o']t find)\b", "address_issue"),
+    (r"\b(kitchen\w*|prep\w*|cooking|cook\w*|restaurant (took|was slow))\b", "restaurant_prep_delay"),
+    (r"\b(backlog\w*|rush\w*|swamp\w*|queued|queue\w*|busy place)\b", "restaurant_backlog"),
 ]
 
 _SENTIMENT_POS = re.compile(r"\b(good|great|quick|fast|on time|hot|well packed|excellent|as always)\b", re.I)

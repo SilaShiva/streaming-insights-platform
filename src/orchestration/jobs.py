@@ -37,12 +37,16 @@ def enriched_events(context: AssetExecutionContext, raw_events: int) -> int:
     cfg = load_config()
     import duckdb
     con = duckdb.connect(cfg["warehouse"]["duckdb_path"])
+    enriched_exists = con.execute(
+        "select count(*) from information_schema.tables where table_name = ?",
+        [cfg["warehouse"]["enriched_table"]],
+    ).fetchone()[0] > 0
     rows = con.execute(
         "select event_id, event_type, ts, order_id, city, restaurant_id, promised_minutes, "
         "actual_minutes, delay_minutes, rating, review_text, prep_minutes, riders_online, "
         "traffic_index, weather_bad from raw_events "
-        "where event_type in ('order_delivered', 'review_posted') and event_id not in "
-        f"(select event_id from {cfg['warehouse']['enriched_table']})"
+        "where event_type in ('order_delivered', 'review_posted') "
+        + (f"and event_id not in (select event_id from {cfg['warehouse']['enriched_table']})" if enriched_exists else "")
     ).fetchall()
     con.close()
 

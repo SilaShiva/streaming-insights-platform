@@ -55,8 +55,8 @@ def city_delay(days: int = Query(7, ge=1, le=90)) -> dict:
     con = duckdb.connect(str(_warehouse_path()), read_only=True)
     try:
         rows = con.execute(
-            "select city, event_date, deliveries, avg_delay_minutes, pct_late_over_10min "
-            "from mart_city_delay order by event_date desc, deliveries desc limit ?", [days * 8]
+            'select city, event_date, deliveries, avg_delay_minutes, pct_late_over_10min '
+            'from "main_marts".mart_city_delay order by event_date desc, deliveries desc limit ?', [days * 8]
         ).fetchall()
     finally:
         con.close()
@@ -72,9 +72,9 @@ def reasons() -> dict:
     con = duckdb.connect(str(_warehouse_path()), read_only=True)
     try:
         rows = con.execute(
-            "select delay_reason, sum(reviews), round(avg(avg_rating), 2), "
-            "round(sum(pct_negative * reviews) / sum(reviews), 2) "
-            "from mart_review_sentiment group by delay_reason order by 2 desc"
+            'select delay_reason, sum(reviews), round(avg(avg_rating), 2), '
+            'round(sum(pct_negative * reviews) / sum(reviews), 2) '
+            'from "main_marts".mart_review_sentiment group by delay_reason order by 2 desc'
         ).fetchall()
     finally:
         con.close()
@@ -90,12 +90,12 @@ def summary() -> dict:
     con = duckdb.connect(str(_warehouse_path()), read_only=True)
     try:
         deliveries, avg_delay, pct_late = con.execute(
-            "select sum(deliveries), round(avg(avg_delay_minutes), 2), "
-            "round(sum(pct_late_over_10min * deliveries) / sum(deliveries), 2) "
-            "from mart_city_delay"
+            'select sum(deliveries), round(avg(avg_delay_minutes), 2), '
+            'round(sum(pct_late_over_10min * deliveries) / sum(deliveries), 2) '
+            'from "main_marts".mart_city_delay'
         ).fetchone()
         top_reason = con.execute(
-            "select delay_reason, sum(reviews) from mart_review_sentiment "
+            'select delay_reason, sum(reviews) from "main_marts".mart_review_sentiment '
             "where delay_reason != 'none' group by 1 order by 2 desc limit 1"
         ).fetchone()
     finally:

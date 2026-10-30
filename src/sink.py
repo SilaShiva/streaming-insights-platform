@@ -40,10 +40,15 @@ class DuckDBSink:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         self.con = duckdb.connect(path)
         table = cfg["warehouse"]["raw_table"]
-        cols_sql = ",\n            ".join(
-            f"{c} {'VARCHAR' if c in ('event_id','event_type','ts','order_id','city','restaurant_id','customer_id','review_text') else 'NUMERIC'}"
-            for c in RAW_COLUMNS
-        )
+        types = {
+            "event_id": "VARCHAR", "event_type": "VARCHAR", "ts": "TIMESTAMP",
+            "order_id": "VARCHAR", "city": "VARCHAR", "restaurant_id": "VARCHAR",
+            "customer_id": "VARCHAR", "promised_minutes": "INTEGER",
+            "actual_minutes": "INTEGER", "delay_minutes": "INTEGER",
+            "review_text": "VARCHAR", "rating": "INTEGER", "prep_minutes": "INTEGER",
+            "riders_online": "INTEGER", "traffic_index": "DOUBLE", "weather_bad": "INTEGER",
+        }
+        cols_sql = ",\n            ".join(f"{c} {types[c]}" for c in RAW_COLUMNS)
         self.con.execute(f"""
             CREATE TABLE IF NOT EXISTS {table} (
             {cols_sql}
@@ -65,10 +70,24 @@ class DuckDBSink:
     def flush(self) -> None:
         if not self.buffer:
             return
+        # dedup within the batch first (seen-set is per write call), then
+        # anti-join against the table so redelivered event_ids across
+        # flushes/streams never duplicate rows (at-least-once upstream)
+        unique: dict[str, tuple] = {}
+        for row in self.buffer:
+            unique.setdefault(row[0], row)
+        self.buffer = list(unique.values())
+
+        col_list = ", ".join(f"c{i}" for i in range(len(RAW_COLUMNS)))
         placeholders = ", ".join(["?"] * len(RAW_COLUMNS))
-        self.con.executemany(
-            f"INSERT INTO {self.table} VALUES ({placeholders})", self.buffer
-        )
+        values_clause = ", ".join(f"({placeholders})" for _ in self.buffer)
+        incoming = self.con.execute(
+            f"SELECT {col_list} FROM (VALUES {values_clause}) AS b({col_list}) "
+            f"ANTI JOIN {self.table} t ON b.c0 = t.event_id",
+            [cell for row in self.buffer for cell in row],
+        ).fetchall()
+        if incoming:
+            self.con.executemany(f"INSERT INTO {self.table} VALUES ({placeholders})", incoming)
         self.buffer.clear()
 
     def flush_if_due(self) -> None:

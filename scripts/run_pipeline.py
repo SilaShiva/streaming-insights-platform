@@ -6,6 +6,8 @@ the Dagster pipeline orchestrates, end to end in one command.
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -36,12 +38,16 @@ def main() -> int:
     print("[2/4] enriching")
     import duckdb
     con = duckdb.connect(cfg["warehouse"]["duckdb_path"])
+    enriched_exists = con.execute(
+        "select count(*) from information_schema.tables where table_name = ?",
+        [cfg["warehouse"]["enriched_table"]],
+    ).fetchone()[0] > 0
     rows = con.execute(
         "select event_id, event_type, ts, order_id, city, restaurant_id, promised_minutes, "
         "actual_minutes, delay_minutes, rating, review_text, prep_minutes, riders_online, "
         "traffic_index, weather_bad from raw_events "
-        "where event_type in ('order_delivered', 'review_posted') and event_id not in "
-        f"(select event_id from {cfg['warehouse']['enriched_table']})"
+        f"where event_type in ('order_delivered', 'review_posted') "
+        + (f"and event_id not in (select event_id from {cfg['warehouse']['enriched_table']})" if enriched_exists else "")
     ).fetchall()
     con.close()
 
@@ -66,8 +72,20 @@ def main() -> int:
     print(f"      enriched {len(out)} events: {json.dumps(enricher.tracker.summary())}")
 
     print("[3/4] dbt build")
-    result = subprocess.run(["dbt", "build"], cwd=PROJECT_ROOT / "dbt",
-                            capture_output=True, text=True, timeout=600)
+    import os
+    profiles = PROJECT_ROOT / "dbt" / ".profiles"
+    profiles.mkdir(exist_ok=True)
+    (profiles / "profiles.yml").write_text(
+        "streaming_insights:\n  target: dev\n  outputs:\n    dev:\n"
+        "      type: duckdb\n"
+        f"      path: {(PROJECT_ROOT / cfg['warehouse']['duckdb_path']).resolve().as_posix()}\n"
+        "      threads: 4\n",
+        encoding="utf-8",
+    )
+    env = {**os.environ, "DBT_PROFILES_DIR": str(profiles.resolve())}
+    dbt_exe = shutil.which("dbt") or str(Path(sys.executable).parent / ("dbt.exe" if os.name == "nt" else "dbt"))
+    result = subprocess.run([dbt_exe, "build"], cwd=PROJECT_ROOT / "dbt",
+                            env=env, capture_output=True, text=True, timeout=600)
     if result.returncode != 0:
         print(result.stdout[-3000:])
         print(result.stderr[-1000:], file=sys.stderr)

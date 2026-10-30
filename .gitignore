@@ -21,6 +21,10 @@ logs/
 # Dagster
 dagster_home/
 
+# dbt
+dbt/target/
+dbt/.profiles/
+
 # OS
 .DS_Store
 Thumbs.db

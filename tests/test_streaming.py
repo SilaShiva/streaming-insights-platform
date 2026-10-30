@@ -47,9 +47,10 @@ def test_consumer_group_end_to_end(gen, tmp_path, monkeypatch):
     lines = generator.stream_batch(15)
 
     fake = fakeredis.FakeRedis(decode_responses=True)
-    monkeypatch.setattr(consumer_mod.redis, "Redis", None) if False else None
+    for line in lines:
+        fake.xadd(cfg["stream"]["key"], {"payload": line})
 
-    # Patch build_sink + redis client creation
+    # Patch the import seam + sink builder
     from src.sink import DuckDBSink
 
     created = {}
@@ -59,16 +60,15 @@ def test_consumer_group_end_to_end(gen, tmp_path, monkeypatch):
         def from_url(*a, **kw):
             return fake
 
-    import redis as real_redis
-    monkeypatch.setattr(consumer_mod, "redis", type("R", (), {"Redis": FakeRedisFactory}))
+    monkeypatch.setattr(consumer_mod, "_get_redis", lambda: FakeRedisFactory)
     monkeypatch.setattr(consumer_mod, "build_sink", lambda c: created.setdefault("sink", DuckDBSink(c)))
 
-    processed = consumer_mod.run_consumer(max_events=len(lines))
+    processed = consumer_mod.run_consumer(max_events=len(lines), cfg=cfg, idle_exits=2)
     assert processed == len(lines)
 
-    # second pass: no new events -> consumer idles gracefully (returns same count)
-    processed2 = consumer_mod.run_consumer(max_events=len(lines) + 5)
-    assert processed2 >= processed
+    # second pass: stream drained -> consumer idles out gracefully via idle_exits
+    processed2 = consumer_mod.run_consumer(max_events=len(lines) + 5, cfg=cfg, idle_exits=2)
+    assert processed2 == 0
 
 
 def test_poison_message_does_not_block(gen, tmp_path, monkeypatch):
@@ -90,8 +90,8 @@ def test_poison_message_does_not_block(gen, tmp_path, monkeypatch):
             return fake
 
     from src.sink import DuckDBSink
-    monkeypatch.setattr(consumer_mod, "redis", type("R", (), {"Redis": FakeRedisFactory}))
+    monkeypatch.setattr(consumer_mod, "_get_redis", lambda: FakeRedisFactory)
     monkeypatch.setattr(consumer_mod, "build_sink", lambda c: DuckDBSink(c))
 
-    processed = consumer_mod.run_consumer(max_events=len(good))
+    processed = consumer_mod.run_consumer(max_events=len(good), cfg=cfg, idle_exits=2)
     assert processed == len(good)

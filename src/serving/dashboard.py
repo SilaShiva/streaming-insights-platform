@@ -32,18 +32,18 @@ con = duckdb.connect(str(db_path), read_only=True)
 
 @st.cache_data(ttl=60)
 def load_city_delay() -> pd.DataFrame:
-    return con.execute("select * from mart_city_delay order by event_date desc").fetchdf()
+    return con.execute('select * from "main_marts".mart_city_delay order by event_date desc').fetchdf()
 
 
 @st.cache_data(ttl=60)
 def load_reasons() -> pd.DataFrame:
-    return con.execute("select * from mart_review_sentiment").fetchdf()
+    return con.execute('select * from "main_marts".mart_review_sentiment').fetchdf()
 
 
 @st.cache_data(ttl=60)
 def load_enrichment_mix() -> pd.DataFrame:
     return con.execute(
-        "select enrich_source, count(*) n from enriched_events group by 1"
+        "select enrich_source, count(*) n from main.enriched_events group by 1"
     ).fetchdf()
 
 

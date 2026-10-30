@@ -36,11 +36,11 @@ class QualityGateRunner:
             return GateResult("row_volume", "FAIL", "raw table empty")
         recent = self._scalar(
             f"select count(*) from {self.raw_table} "
-            f"where ts > (select max(ts) from {self.raw_table}) - interval 60 minutes"
+            f"where ts > (select max(ts) from {self.raw_table}) - INTERVAL '1' HOUR"
         )
         prior = self._scalar(
             f"select count(*) from {self.raw_table} "
-            f"where ts <= (select max(ts) from {self.raw_table}) - interval 60 minutes"
+            f"where ts <= (select max(ts) from {self.raw_table}) - INTERVAL '1' HOUR"
         )
         if prior == 0:
             return GateResult("row_volume", "PASS", f"warming up: {total} rows total")

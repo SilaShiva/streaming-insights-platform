@@ -150,9 +150,9 @@ class EnrichedDuckDBSink:
 
 
 def run_enrichment_consumer(max_events: int | None = None, sink=None, enricher=None,
-                            quiet: bool = False) -> dict:
+                            quiet: bool = False, cfg: dict | None = None) -> dict:
     """Consume events, enrich, write to enriched table. Returns run stats."""
-    cfg = load_config()
+    cfg = cfg or load_config()
     enricher = enricher or Enricher(cfg)
     sink = sink or EnrichedDuckDBSink(cfg)
 
@@ -188,7 +188,7 @@ def run_enrichment_consumer(max_events: int | None = None, sink=None, enricher=N
         def close(self) -> None:
             self.inner.close()
 
-    processed = run_plain_consumer(max_events=max_events, sink=_Adapter(sink))
+    processed = run_plain_consumer(max_events=max_events, sink=_Adapter(sink), cfg=cfg)
     stats = {
         "processed": processed,
         "llm": enricher.stats["llm"],

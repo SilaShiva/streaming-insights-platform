@@ -6,6 +6,7 @@ all exercised without BigQuery.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -77,8 +78,11 @@ def warehouse(tmp_path_factory):
     )
 
     env = {**dict(__import__("os").environ), "DBT_PROFILES_DIR": str(tmp)}
+    # resolve dbt from the active interpreter's environment (venv Scripts/),
+    # falling back to PATH
+    dbt_exe = shutil.which("dbt") or str(Path(sys.executable).parent / ("dbt.exe" if os.name == "nt" else "dbt"))
     run = lambda *args: subprocess.run(
-        ["dbt", *args], cwd=DBT_DIR, env=env, capture_output=True, text=True, timeout=300
+        [dbt_exe, *args], cwd=DBT_DIR, env=env, capture_output=True, text=True, timeout=300
     )
     deps = run("deps")
     build = run("build")
@@ -99,16 +103,19 @@ def test_dbt_build_succeeds(warehouse):
 def test_staging_dedups_event_ids(warehouse):
     import duckdb
     con = duckdb.connect(str(warehouse["db_path"]), read_only=True)
-    n_stg = con.execute("select count(*) from stg_events").fetchone()[0]
-    n_distinct = con.execute("select count(distinct event_id) from stg_events").fetchone()[0]
+    n_stg = con.execute('select count(*) from "main_staging".stg_events').fetchone()[0]
+    n_distinct = con.execute('select count(distinct event_id) from "main_staging".stg_events').fetchone()[0]
     con.close()
     assert n_stg == n_distinct
+    assert n_stg > 0
 
 
 def test_mart_city_delay_grain(warehouse):
     import duckdb
     con = duckdb.connect(str(warehouse["db_path"]), read_only=True)
-    rows = con.execute("select count(*), count(distinct (city, event_date)) from mart_city_delay").fetchone()
+    rows = con.execute(
+        'select count(*), count(distinct (city, event_date)) from "main_marts".mart_city_delay'
+    ).fetchone()
     con.close()
     assert rows[0] == rows[1], "mart_city_delay must be unique on (city, event_date)"
     assert rows[0] > 0
@@ -118,7 +125,7 @@ def test_mart_review_sentiment_pcts_in_range(warehouse):
     import duckdb
     con = duckdb.connect(str(warehouse["db_path"]), read_only=True)
     bad = con.execute(
-        "select count(*) from mart_review_sentiment "
+        'select count(*) from "main_marts".mart_review_sentiment '
         "where pct_negative < 0 or pct_negative > 100 or pct_llm_enriched < 0 or pct_llm_enriched > 100"
     ).fetchone()[0]
     con.close()

@@ -22,6 +22,17 @@ from dotenv import load_dotenv
 from src.config import PROJECT_ROOT, load_config
 from src.sink import build_sink
 
+_redis_module = None
+
+
+def _get_redis():
+    """Import seam: tests patch this to inject fakeredis."""
+    global _redis_module
+    if _redis_module is None:
+        import redis as _redis
+        _redis_module = _redis
+    return _redis_module.Redis
+
 
 def ensure_group(client, key: str, group: str) -> None:
     try:
@@ -38,14 +49,16 @@ def claim_stale(client, key: str, group: str, consumer: str, min_idle_ms: int = 
     return res[1] if res else []
 
 
-def run_consumer(max_events: int | None = None, sink=None) -> int:
-    """Consume until Ctrl+C or max_events reached. Returns events processed."""
-    cfg = load_config()
+def run_consumer(max_events: int | None = None, sink=None, cfg: dict | None = None,
+                 idle_exits: int = 0) -> int:
+    """Consume until Ctrl+C, max_events, or idle_exits empty polls (0 = run forever).
+
+    Returns events processed."""
+    cfg = cfg or load_config()
     stream_cfg = cfg["stream"]
 
-    import redis
-
-    client = redis.Redis.from_url(
+    redis_factory = _get_redis()
+    client = redis_factory.from_url(
         stream_cfg["redis_url"], decode_responses=True, socket_connect_timeout=5
     )
     client.ping()
@@ -67,6 +80,7 @@ def run_consumer(max_events: int | None = None, sink=None) -> int:
     signal.signal(signal.SIGTERM, _stop)
 
     print(f"[consumer] group='{group}' consumer='{consumer}' key='{key}'")
+    idle_polls = 0
     while running:
         # 1) reclaim abandoned pendings, 2) read new entries
         messages = claim_stale(client, key, group, consumer)
@@ -79,7 +93,11 @@ def run_consumer(max_events: int | None = None, sink=None) -> int:
 
         if not messages:
             sink.flush_if_due()
+            idle_polls += 1
+            if idle_exits and idle_polls >= idle_exits:
+                break
             continue
+        idle_polls = 0
 
         rows = []
         ids = []
