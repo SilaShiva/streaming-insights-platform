@@ -20,7 +20,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install pyyaml python-dotenv fakeredis duckdb pandas requests \
-                      pytest great-expectations "dbt-core>=1.8" "dbt-duckdb>=1.8" \
+                      pytest great-expectations "dbt-core==1.10.*" "dbt-duckdb==1.9.*" \
                       fastapi uvicorn httpx
           pip install -e . --no-deps
 

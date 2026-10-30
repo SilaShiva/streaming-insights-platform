@@ -98,6 +98,19 @@ def warehouse(tmp_path_factory):
 def test_dbt_build_succeeds(warehouse):
     if warehouse["build"].returncode != 0:
         pytest.fail("dbt build failed:\n" + warehouse["build"].stdout[-3000:] + warehouse["build"].stderr[-1000:])
+    # returncode 0 is not sufficient: assert models actually landed
+    import duckdb
+    con = duckdb.connect(str(warehouse["db_path"]), read_only=True)
+    found = con.execute(
+        "select count(*) from information_schema.tables where table_name in "
+        "('stg_events', 'mart_city_delay', 'mart_review_sentiment')"
+    ).fetchone()[0]
+    con.close()
+    if found < 3:
+        pytest.fail(
+            f"dbt build reported success but only {found}/3 models exist in the warehouse.\n"
+            "dbt stdout:\n" + warehouse["build"].stdout[-3000:]
+        )
 
 
 def _find_table(con, table_name: str) -> str:
