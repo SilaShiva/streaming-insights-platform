@@ -1,0 +1,36 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pyyaml python-dotenv fakeredis duckdb pandas requests \
+                      pytest great-expectations "dbt-core>=1.8" "dbt-duckdb>=1.8" \
+                      fastapi uvicorn httpx
+          pip install -e . --no-deps
+
+      - name: Run unit + dbt tests
+        env:
+          DBT_PROFILES_DIR: ${{ github.workspace }}/dbt/.profiles_ci
+        run: pytest -q
+
+      - name: dbt compile check
+        run: |
+          mkdir -p dbt/.profiles_ci
+          printf 'streaming_insights:\n  target: dev\n  outputs:\n    dev:\n      type: duckdb\n      path: ":memory:"\n      threads: 2\n' > dbt/.profiles_ci/profiles.yml
+          cd dbt && dbt parse
