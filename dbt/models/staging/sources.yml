@@ -1,0 +1,11 @@
+version: 2
+
+sources:
+  - name: raw
+    description: "Events landed by the Redis Streams consumer"
+    schema: main
+    tables:
+      - name: raw_events
+        description: "Append-only raw events (dedup applied downstream)"
+      - name: enriched_events
+        description: "LLM/rule-enriched events written by the enrichment consumer"

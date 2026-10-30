@@ -1,0 +1,29 @@
+version: 2
+
+models:
+  - name: stg_events
+    description: "Typed + deduped event stream, one row per event_id"
+    columns:
+      - name: event_id
+        description: "Unique event identifier"
+        tests:
+          - unique
+          - not_null
+      - name: event_type
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["order_placed", "order_delivered", "review_posted"]
+      - name: event_ts
+        tests:
+          - not_null
+      - name: city
+        tests:
+          - not_null
+      - name: delay_minutes
+        description: "0 when on-time; null only for non-delivered events"
+        tests:
+          - dbt_utils_expression_is_true:
+              arguments:
+                expression: ">= 0"

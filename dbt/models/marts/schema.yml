@@ -1,0 +1,50 @@
+version: 2
+
+models:
+  - name: enriched_events
+    description: "LLM/rule-enriched events (delay reason, sentiment) from the streaming consumer"
+    columns:
+      - name: event_id
+        tests: [unique, not_null]
+      - name: delay_reason
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [restaurant_prep_delay, rider_shortage, traffic, weather,
+                         address_issue, restaurant_backlog, unknown, none]
+      - name: sentiment
+        tests:
+          - accepted_values:
+              arguments:
+                values: [positive, negative, neutral]
+              config:
+                severity: warn
+      - name: enrich_source
+        tests:
+          - accepted_values:
+              arguments:
+                values: [llm, rules, cache]
+
+  - name: mart_city_delay
+    description: "Per-city daily delivery-delay aggregates"
+    columns:
+      - name: city
+        tests: [not_null]
+      - name: event_date
+        tests: [not_null]
+      - name: deliveries
+        tests:
+          - not_null
+          - dbt_utils_expression_is_true:
+              arguments:
+                expression: "> 0"
+
+  - name: mart_review_sentiment
+    description: "Per-city daily delay-reason review mix"
+    columns:
+      - name: delay_reason
+        tests: [not_null]
+      - name: reviews
+        tests:
+          - not_null
