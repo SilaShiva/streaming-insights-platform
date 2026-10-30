@@ -30,6 +30,8 @@ jobs:
         run: pytest -q
 
       - name: dbt compile check
+        env:
+          DBT_PROFILES_DIR: ${{ github.workspace }}/dbt/.profiles_ci
         run: |
           mkdir -p dbt/.profiles_ci
           printf 'streaming_insights:\n  target: dev\n  outputs:\n    dev:\n      type: duckdb\n      path: ":memory:"\n      threads: 2\n' > dbt/.profiles_ci/profiles.yml
