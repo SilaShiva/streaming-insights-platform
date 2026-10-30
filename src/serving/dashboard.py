@@ -30,20 +30,35 @@ import duckdb
 con = duckdb.connect(str(db_path), read_only=True)
 
 
+def _schema(con, table: str) -> str:
+    """Resolve a model's schema at runtime (schema naming is dbt-target-dependent)."""
+    rows = con.execute(
+        "select table_schema from information_schema.tables where table_name = ?", [table]
+    ).fetchall()
+    if not rows:
+        st.error(f"Table `{table}` not found — run the pipeline first.")
+        st.stop()
+    return rows[0][0]
+
+
 @st.cache_data(ttl=60)
 def load_city_delay() -> pd.DataFrame:
-    return con.execute('select * from "main_marts".mart_city_delay order by event_date desc').fetchdf()
+    return con.execute(
+        f'select * from "{_schema(con, "mart_city_delay")}".mart_city_delay order by event_date desc'
+    ).fetchdf()
 
 
 @st.cache_data(ttl=60)
 def load_reasons() -> pd.DataFrame:
-    return con.execute('select * from "main_marts".mart_review_sentiment').fetchdf()
+    return con.execute(
+        f'select * from "{_schema(con, "mart_review_sentiment")}".mart_review_sentiment'
+    ).fetchdf()
 
 
 @st.cache_data(ttl=60)
 def load_enrichment_mix() -> pd.DataFrame:
     return con.execute(
-        "select enrich_source, count(*) n from main.enriched_events group by 1"
+        'select enrich_source, count(*) n from "main".enriched_events group by 1'
     ).fetchdf()
 
 

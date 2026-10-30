@@ -39,6 +39,17 @@ def _warehouse_path() -> Path:
     return p
 
 
+def _table_schema(con, table: str) -> str:
+    """Resolve a model's schema at runtime (schema naming is dbt-target-dependent)."""
+    rows = con.execute(
+        "select table_schema from information_schema.tables where table_name = ?",
+        [table],
+    ).fetchall()
+    if not rows:
+        raise HTTPException(503, f"table {table} not built yet -- run the pipeline first")
+    return rows[0][0]
+
+
 @app.get("/health")
 def health() -> dict:
     try:
@@ -54,9 +65,10 @@ def city_delay(days: int = Query(7, ge=1, le=90)) -> dict:
     cfg = get_cfg()
     con = duckdb.connect(str(_warehouse_path()), read_only=True)
     try:
+        schema = _table_schema(con, "mart_city_delay")
         rows = con.execute(
-            'select city, event_date, deliveries, avg_delay_minutes, pct_late_over_10min '
-            'from "main_marts".mart_city_delay order by event_date desc, deliveries desc limit ?', [days * 8]
+            f'select city, event_date, deliveries, avg_delay_minutes, pct_late_over_10min '
+            f'from "{schema}".mart_city_delay order by event_date desc, deliveries desc limit ?', [days * 8]
         ).fetchall()
     finally:
         con.close()
@@ -71,10 +83,11 @@ def reasons() -> dict:
     import duckdb
     con = duckdb.connect(str(_warehouse_path()), read_only=True)
     try:
+        schema = _table_schema(con, "mart_review_sentiment")
         rows = con.execute(
-            'select delay_reason, sum(reviews), round(avg(avg_rating), 2), '
-            'round(sum(pct_negative * reviews) / sum(reviews), 2) '
-            'from "main_marts".mart_review_sentiment group by delay_reason order by 2 desc'
+            f'select delay_reason, sum(reviews), round(avg(avg_rating), 2), '
+            f'round(sum(pct_negative * reviews) / sum(reviews), 2) '
+            f'from "{schema}".mart_review_sentiment group by delay_reason order by 2 desc'
         ).fetchall()
     finally:
         con.close()
@@ -89,13 +102,15 @@ def summary() -> dict:
     import duckdb
     con = duckdb.connect(str(_warehouse_path()), read_only=True)
     try:
+        schema = _table_schema(con, "mart_city_delay")
         deliveries, avg_delay, pct_late = con.execute(
-            'select sum(deliveries), round(avg(avg_delay_minutes), 2), '
-            'round(sum(pct_late_over_10min * deliveries) / sum(deliveries), 2) '
-            'from "main_marts".mart_city_delay'
+            f'select sum(deliveries), round(avg(avg_delay_minutes), 2), '
+            f'round(sum(pct_late_over_10min * deliveries) / sum(deliveries), 2) '
+            f'from "{schema}".mart_city_delay'
         ).fetchone()
+        schema_r = _table_schema(con, "mart_review_sentiment")
         top_reason = con.execute(
-            'select delay_reason, sum(reviews) from "main_marts".mart_review_sentiment '
+            f'select delay_reason, sum(reviews) from "{schema_r}".mart_review_sentiment '
             "where delay_reason != 'none' group by 1 order by 2 desc limit 1"
         ).fetchone()
     finally:

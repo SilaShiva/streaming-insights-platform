@@ -100,11 +100,25 @@ def test_dbt_build_succeeds(warehouse):
         pytest.fail("dbt build failed:\n" + warehouse["build"].stdout[-3000:] + warehouse["build"].stderr[-1000:])
 
 
+def _find_table(con, table_name: str) -> str:
+    """Resolve a dbt model's actual schema at runtime (schema naming is
+    environment-dependent: dbt-duckdb prefixes custom schemas with the target
+    schema unless a generate_schema_name macro pins it)."""
+    rows = con.execute(
+        "select table_schema from information_schema.tables where table_name = ?",
+        [table_name],
+    ).fetchall()
+    if not rows:
+        pytest.fail(f"table {table_name} not found in any schema")
+    return rows[0][0]
+
+
 def test_staging_dedups_event_ids(warehouse):
     import duckdb
     con = duckdb.connect(str(warehouse["db_path"]), read_only=True)
-    n_stg = con.execute('select count(*) from "main_staging".stg_events').fetchone()[0]
-    n_distinct = con.execute('select count(distinct event_id) from "main_staging".stg_events').fetchone()[0]
+    schema = _find_table(con, "stg_events")
+    n_stg = con.execute(f'select count(*) from "{schema}".stg_events').fetchone()[0]
+    n_distinct = con.execute(f'select count(distinct event_id) from "{schema}".stg_events').fetchone()[0]
     con.close()
     assert n_stg == n_distinct
     assert n_stg > 0
@@ -113,8 +127,9 @@ def test_staging_dedups_event_ids(warehouse):
 def test_mart_city_delay_grain(warehouse):
     import duckdb
     con = duckdb.connect(str(warehouse["db_path"]), read_only=True)
+    schema = _find_table(con, "mart_city_delay")
     rows = con.execute(
-        'select count(*), count(distinct (city, event_date)) from "main_marts".mart_city_delay'
+        f'select count(*), count(distinct (city, event_date)) from "{schema}".mart_city_delay'
     ).fetchone()
     con.close()
     assert rows[0] == rows[1], "mart_city_delay must be unique on (city, event_date)"
@@ -124,8 +139,9 @@ def test_mart_city_delay_grain(warehouse):
 def test_mart_review_sentiment_pcts_in_range(warehouse):
     import duckdb
     con = duckdb.connect(str(warehouse["db_path"]), read_only=True)
+    schema = _find_table(con, "mart_review_sentiment")
     bad = con.execute(
-        'select count(*) from "main_marts".mart_review_sentiment '
+        f'select count(*) from "{schema}".mart_review_sentiment '
         "where pct_negative < 0 or pct_negative > 100 or pct_llm_enriched < 0 or pct_llm_enriched > 100"
     ).fetchone()[0]
     con.close()
